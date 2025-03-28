@@ -11,7 +11,7 @@
     },
     "files": {
         "ignoreUnknown": true,
-        "includes": ["**", "!dist", "!node_modules", "!packages/database/migrations"]
+        "includes": ["**", "!dist", "!node_modules", "!migrations"]
     },
     "formatter": {
         "attributePosition": "multiline",
