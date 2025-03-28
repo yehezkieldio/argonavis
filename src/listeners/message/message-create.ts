@@ -180,15 +180,22 @@ export class MessageCreateListener extends Listener {
                 role: "user",
                 parts: [{ text: `Now, please respond to this message from the user:\nUser: ${userQuery}` }]
             });
+            history.push({
+                role: "user",
+                parts: [
+                    {
+                        text: "Make sure your response content is Discord-friendly, so no fancy formatting Discord doesn't support like tables."
+                    }
+                ]
+            });
 
             const botResponseText = await generateText(history);
 
             if (botResponseText) {
-                // Handle Discord message length limit (2000 chars)
                 const chunks = this.splitMessage(botResponseText, 1990);
                 let sentMessage: Message | null = null;
                 for (const chunk of chunks) {
-                    sentMessage = await message.reply(chunk); // Reply to the user's message
+                    sentMessage = await message.reply(chunk);
                 }
 
                 if (sentMessage) {

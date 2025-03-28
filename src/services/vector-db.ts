@@ -1,5 +1,5 @@
 import { container } from "@sapphire/framework";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "#/database";
 import { type MessageMetadata, messages } from "#/database/schema";
 import { env } from "#/env";
@@ -23,7 +23,19 @@ export async function addMessageToVectorDb(
     }
 
     try {
-        const embeddingVector: number[] = await generateEmbedding(text);
+        let embeddingVector: number[] = await generateEmbedding(text);
+        const expectedDimensions: number = env.PGVECTOR_DIMENSION;
+        if (embeddingVector.length !== expectedDimensions) {
+            container.logger.warn(
+                `Embedding dimension mismatch: got ${embeddingVector.length}, expected ${expectedDimensions}. Resizing vector.`
+            );
+
+            if (embeddingVector.length > expectedDimensions) {
+                embeddingVector = embeddingVector.slice(0, expectedDimensions);
+            } else {
+                embeddingVector = [...embeddingVector, ...Array(expectedDimensions - embeddingVector.length).fill(0)];
+            }
+        }
 
         const dataToInsert: StoredMessageData = {
             messageId: messageId,
@@ -43,6 +55,7 @@ export async function addMessageToVectorDb(
         );
     } catch (e) {
         container.logger.error(`Error adding message to vector DB: ${e}`);
+        container.logger.error(e);
     }
 }
 
@@ -55,7 +68,20 @@ export async function searchSimiliarMessages(
     if (!queryText || queryText.trim().length === 0) return [];
 
     try {
-        const queryEmbedding: number[] = await generateEmbedding(queryText);
+        let queryEmbedding: number[] = await generateEmbedding(queryText);
+        const expectedDimensions = env.PGVECTOR_DIMENSION;
+        if (queryEmbedding.length !== expectedDimensions) {
+            container.logger.warn(
+                `Search embedding dimension mismatch: got ${queryEmbedding.length}, expected ${expectedDimensions}. Resizing vector.`
+            );
+
+            if (queryEmbedding.length > expectedDimensions) {
+                queryEmbedding = queryEmbedding.slice(0, expectedDimensions);
+            } else {
+                queryEmbedding = [...queryEmbedding, ...Array(expectedDimensions - queryEmbedding.length).fill(0)];
+            }
+        }
+
         const queryEmbeddingString: string = JSON.stringify(queryEmbedding);
 
         const filters = [];
@@ -77,18 +103,24 @@ export async function searchSimiliarMessages(
                 channelId: messages.channelId,
                 timestamp: messages.timestamp,
                 contentType: messages.contentType,
-                originalText: messages.originalText
+                originalText: messages.originalText,
+                distance
             })
             .from(messages)
             .where(whereClause)
-            .orderBy(asc(distance))
+            .orderBy(distance)
             .limit(nResults);
 
         container.logger.info(`Found ${results.length} similar messages for query text.`);
 
         const relevantMetadata: MessageMetadata[] = results.map((row) => ({
-            ...row,
-            contentType: row.contentType as "user_message" | "bot_response"
+            messageId: row.messageId,
+            userId: row.userId,
+            guildId: row.guildId,
+            channelId: row.channelId,
+            timestamp: row.timestamp,
+            contentType: row.contentType as "user_message" | "bot_response",
+            originalText: row.originalText
         }));
 
         relevantMetadata.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
