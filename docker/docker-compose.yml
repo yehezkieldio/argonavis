@@ -1,0 +1,60 @@
+services:
+  postgres:
+    container_name: argonavis-postgres
+    profiles: [development]
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: elizielx
+      POSTGRES_PASSWORD: elizielx
+      POSTGRES_DB: argonavis
+    ports:
+      - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - argonavis-network
+  grafana:
+    container_name: argonavis-grafana
+    image: grafana/grafana:latest
+    profiles: [observability]
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_FEATURE_TOGGLES_ENABLE=alertingSimplifiedRouting,alertingQueryAndExpressionsStepMode
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - argonavis-network
+  loki:
+    container_name: argonavis-loki
+    image: grafana/loki:latest
+    profiles: [observability]
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    depends_on:
+      - grafana
+    networks:
+      - argonavis-network
+volumes:
+  postgres_data:
+    name: argonavis-postgres-data
+  grafana_data:
+    name: argonavis-grafana-data
+  loki_data:
+    name: argonavis-loki-data
+networks:
+  argonavis-network:
+    name: argonavis-network
+    driver: bridge
